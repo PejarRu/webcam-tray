@@ -1,0 +1,131 @@
+#!/bin/bash
+
+SERVICE_NAME="virtualcam.service"
+ICON="camera-web"
+PIPE="/tmp/webcam-tray-pipe"
+PID_FILE="/tmp/webcam-tray.pid"
+
+# Matar instancias previas
+if [ -f "$PID_FILE" ]; then
+    OLD_PID=$(cat "$PID_FILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        kill "$OLD_PID" 2>/dev/null
+        sleep 0.5
+    fi
+fi
+
+get_status() {
+    systemctl --user is-active "$SERVICE_NAME" 2>/dev/null
+}
+
+start_service() {
+    systemctl --user start "$SERVICE_NAME"
+    notify-send "VirtualCam" "Servicio iniciado ✓" -i "$ICON"
+}
+
+stop_service() {
+    systemctl --user stop "$SERVICE_NAME"
+    notify-send "VirtualCam" "Servicio detenido ✗" -i "$ICON"
+}
+
+show_status() {
+    status=$(get_status)
+    if [ "$status" = "active" ]; then
+        notify-send "VirtualCam" "Estado: Activo ✓" -i "$ICON"
+    else
+        notify-send "VirtualCam" "Estado: Inactivo ✗" -i "$ICON"
+    fi
+}
+
+show_logs() {
+    journalctl --user -u "$SERVICE_NAME" -n 100 --no-pager | zenity --text-info --title="VirtualCam Logs" --width=900 --height=600 &
+}
+
+update_icon() {
+    if [ ! -p "$PIPE" ]; then
+        return
+    fi
+    
+    status=$(get_status)
+    if [ "$status" = "active" ]; then
+        echo "tooltip:VirtualCam: ✓ Activo" > "$PIPE"
+    else
+        echo "tooltip:VirtualCam: ✗ Inactivo" > "$PIPE"
+    fi
+}
+
+tray_menu() {
+    # Limpiar pipe anterior
+    rm -f "$PIPE"
+    mkfifo "$PIPE"
+    
+    # Guardar PID
+    echo $$ > "$PID_FILE"
+    
+    # Cleanup al salir
+    trap "rm -f $PIPE $PID_FILE; exit" EXIT INT TERM
+    
+    # Iniciar yad en background
+    yad --notification \
+        --listen \
+        --image="$ICON" \
+        --text="VirtualCam" \
+        --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Salir!$0 cmd_quit" \
+        --no-middle \
+        --command="" < "$PIPE" &
+    
+    YAD_PID=$!
+    
+    # Loop de actualización
+    while true; do
+        if ! kill -0 "$YAD_PID" 2>/dev/null; then
+            break
+        fi
+        update_icon
+        sleep 2
+    done
+    
+    rm -f "$PIPE" "$PID_FILE"
+}
+
+case "${1:-tray}" in
+    start)
+        start_service
+        ;;
+    stop)
+        stop_service
+        ;;
+    status)
+        show_status
+        ;;
+    logs)
+        show_logs
+        ;;
+    tray)
+        tray_menu
+        ;;
+    cmd_start)
+        start_service
+        ;;
+    cmd_stop)
+        stop_service
+        ;;
+    cmd_status)
+        show_status
+        ;;
+    cmd_logs)
+        show_logs
+        ;;
+    cmd_quit)
+        if [ -f "$PID_FILE" ]; then
+            TRAY_PID=$(cat "$PID_FILE")
+            kill "$TRAY_PID" 2>/dev/null
+        fi
+        rm -f "$PIPE" "$PID_FILE"
+        exit 0
+        ;;
+    *)
+        echo "Uso: $0 {start|stop|status|logs|tray}"
+        exit 1
+        ;;
+esac

@@ -1,0 +1,24 @@
+[Unit]
+Description=VirtualCam (icamerasrc -> v4l2loopback)
+After=default.target
+ConditionPathExists=/dev/video48
+
+[Service]
+Type=simple
+Environment=GST_DEBUG=icamerasrc:2
+# Asegura que nadie tenga la cámara física abierta
+ExecStartPre=/usr/bin/bash -lc 'fuser -k /dev/video0 /dev/media* 2>/dev/null || true'
+ExecStart=/usr/bin/gst-launch-1.0 -v \
+  icamerasrc device-name=ov02c10-uf io-mode=userptr buffer-count=3 \
+  ! video/x-raw,format=NV12,width=1280,height=720,framerate=30/1 \
+  ! videoconvert ! video/x-raw,format=YUY2 \
+  ! queue leaky=2 max-size-buffers=8 \
+  ! identity drop-allocation=true \
+  ! v4l2sink device=/dev/video48 io-mode=mmap sync=false qos=false async=false
+Restart=always
+RestartSec=3
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Install]
+WantedBy=default.target
