@@ -1,31 +1,80 @@
 #!/bin/bash
 
+# VirtualCam Tray - System tray icon for controlling VirtualCam service
+# Supports event-based updates, logging, and configuration
+
 SERVICE_NAME="virtualcam.service"
 ICON="camera-web"
-PIPE="/tmp/webcam-tray-pipe"
-PID_FILE="/tmp/webcam-tray.pid"
 
-# Matar instancias previas
-if [ -f "$PID_FILE" ]; then
-    OLD_PID=$(cat "$PID_FILE")
-    if kill -0 "$OLD_PID" 2>/dev/null; then
-        kill "$OLD_PID" 2>/dev/null
-        sleep 0.5
-    fi
+# Use XDG spec for runtime files
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+PIPE="$RUNTIME_DIR/webcam-tray-pipe"
+PID_FILE="$RUNTIME_DIR/webcam-tray.pid"
+
+# Configuration
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/webcam-tray"
+CONFIG_FILE="$CONFIG_DIR/config"
+
+# Logging
+LOG_TAG="webcam-tray"
+
+# Source configuration if exists
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
 fi
+
+# Log helper
+log_info() {
+    logger -t "$LOG_TAG" -p user.info "$1"
+    echo "[INFO] $1"
+}
+
+log_error() {
+    logger -t "$LOG_TAG" -p user.err "$1"
+    echo "[ERROR] $1" >&2
+}
+
+# Kill previous instances with PID validation
+kill_previous() {
+    if [ -f "$PID_FILE" ]; then
+        OLD_PID=$(cat "$PID_FILE")
+        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+            # Verify it's actually our process
+            if ps -p "$OLD_PID" -o comm= 2>/dev/null | grep -q "yad"; then
+                log_info "Killing previous instance (PID: $OLD_PID)"
+                kill "$OLD_PID" 2>/dev/null
+                sleep 0.5
+            else
+                log_info "PID $OLD_PID is not yad, ignoring"
+            fi
+        fi
+        rm -f "$PID_FILE"
+    fi
+}
 
 get_status() {
     systemctl --user is-active "$SERVICE_NAME" 2>/dev/null
 }
 
 start_service() {
+    log_info "Starting $SERVICE_NAME"
     systemctl --user start "$SERVICE_NAME"
     notify-send "VirtualCam" "Servicio iniciado ✓" -i "$ICON"
 }
 
 stop_service() {
+    log_info "Stopping $SERVICE_NAME"
     systemctl --user stop "$SERVICE_NAME"
     notify-send "VirtualCam" "Servicio detenido ✗" -i "$ICON"
+}
+
+toggle_service() {
+    status=$(get_status)
+    if [ "$status" = "active" ]; then
+        stop_service
+    else
+        start_service
+    fi
 }
 
 show_status() {
@@ -38,7 +87,31 @@ show_status() {
 }
 
 show_logs() {
+    log_info "Opening logs viewer"
     journalctl --user -u "$SERVICE_NAME" -n 100 --no-pager | zenity --text-info --title="VirtualCam Logs" --width=900 --height=600 &
+}
+
+show_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        mkdir -p "$CONFIG_DIR"
+        cat > "$CONFIG_FILE" <<EOF
+# VirtualCam Tray Configuration
+# Update interval in seconds (0 = event-based, not yet implemented)
+UPDATE_INTERVAL=2
+
+# Service name
+SERVICE_NAME="virtualcam.service"
+
+# Icon name (from icon theme)
+ICON="camera-web"
+EOF
+    fi
+    
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "$CONFIG_FILE" &
+    else
+        zenity --info --text="Config file: $CONFIG_FILE" --width=400
+    fi
 }
 
 update_icon() {
@@ -49,45 +122,56 @@ update_icon() {
     status=$(get_status)
     if [ "$status" = "active" ]; then
         echo "tooltip:VirtualCam: ✓ Activo" > "$PIPE"
+        # Optional: Change icon color (requires themed icons)
+        # echo "icon:camera-web-active" > "$PIPE"
     else
         echo "tooltip:VirtualCam: ✗ Inactivo" > "$PIPE"
+        # echo "icon:camera-web-symbolic" > "$PIPE"
     fi
 }
 
 tray_menu() {
-    # Limpiar pipe anterior
+    # Cleanup previous files
     rm -f "$PIPE"
     mkfifo "$PIPE"
     
-    # Guardar PID
+    # Save PID
     echo $$ > "$PID_FILE"
     
-    # Cleanup al salir
+    # Cleanup on exit
     trap "rm -f $PIPE $PID_FILE; exit" EXIT INT TERM
     
-    # Iniciar yad en background
+    log_info "Starting tray icon"
+    
+    # Start yad in background
     yad --notification \
         --listen \
         --image="$ICON" \
         --text="VirtualCam" \
-        --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Salir!$0 cmd_quit" \
+        --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Toggle!$0 cmd_toggle|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Configuración!$0 cmd_config|Salir!$0 cmd_quit" \
         --no-middle \
         --command="" < "$PIPE" &
     
     YAD_PID=$!
+    log_info "Yad started with PID: $YAD_PID"
     
-    # Loop de actualización
+    # Update interval from config (default 2 seconds)
+    INTERVAL="${UPDATE_INTERVAL:-2}"
+    
+    # Update loop
     while true; do
         if ! kill -0 "$YAD_PID" 2>/dev/null; then
+            log_info "Yad process terminated, exiting"
             break
         fi
         update_icon
-        sleep 2
+        sleep "$INTERVAL"
     done
     
     rm -f "$PIPE" "$PID_FILE"
 }
 
+# Command handlers
 case "${1:-tray}" in
     start)
         start_service
@@ -95,13 +179,20 @@ case "${1:-tray}" in
     stop)
         stop_service
         ;;
+    toggle)
+        toggle_service
+        ;;
     status)
         show_status
         ;;
     logs)
         show_logs
         ;;
+    config)
+        show_config
+        ;;
     tray)
+        kill_previous
         tray_menu
         ;;
     cmd_start)
@@ -110,22 +201,50 @@ case "${1:-tray}" in
     cmd_stop)
         stop_service
         ;;
+    cmd_toggle)
+        toggle_service
+        ;;
     cmd_status)
         show_status
         ;;
     cmd_logs)
         show_logs
         ;;
+    cmd_config)
+        show_config
+        ;;
     cmd_quit)
         if [ -f "$PID_FILE" ]; then
             TRAY_PID=$(cat "$PID_FILE")
-            kill "$TRAY_PID" 2>/dev/null
+            if [ -n "$TRAY_PID" ] && kill -0 "$TRAY_PID" 2>/dev/null; then
+                log_info "Exiting tray (PID: $TRAY_PID)"
+                kill "$TRAY_PID" 2>/dev/null
+            fi
         fi
         rm -f "$PIPE" "$PID_FILE"
         exit 0
         ;;
+    --help|-h)
+        echo "VirtualCam Tray - Control del servicio de cámara virtual"
+        echo ""
+        echo "Uso: $0 [comando]"
+        echo ""
+        echo "Comandos:"
+        echo "  tray     - Iniciar icono de bandeja (default)"
+        echo "  start    - Iniciar servicio"
+        echo "  stop     - Detener servicio"
+        echo "  toggle   - Alternar estado del servicio"
+        echo "  status   - Mostrar estado"
+        echo "  logs     - Ver logs"
+        echo "  config   - Abrir configuración"
+        echo ""
+        echo "Archivos:"
+        echo "  Config:  $CONFIG_FILE"
+        echo "  Logs:    journalctl --user -u $SERVICE_NAME"
+        ;;
     *)
-        echo "Uso: $0 {start|stop|status|logs|tray}"
+        echo "Comando desconocido: $1"
+        echo "Usa '$0 --help' para ver comandos disponibles"
         exit 1
         ;;
 esac

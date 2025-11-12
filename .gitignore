@@ -3,3 +3,27 @@
 *~
 *.bak
 .DS_Store
+
+# Build artifacts
+*.tar.gz
+*.zip
+pkg/
+src/
+
+# Test artifacts
+tests/*.log
+tests/tmp/
+
+# Runtime files (should not be committed)
+*.pid
+*.pipe
+
+# User configuration (examples are OK, actual configs are not)
+config
+!*.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

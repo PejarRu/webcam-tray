@@ -1,0 +1,112 @@
+.TH WEBCAM-TRAY 1 "November 2025" "webcam-tray 1.1.0" "User Commands"
+.SH NAME
+webcam-tray \- System tray icon for controlling VirtualCam service
+.SH SYNOPSIS
+.B webcam-tray
+[\fICOMMAND\fR]
+.SH DESCRIPTION
+.B webcam-tray
+provides a system tray icon for easy control of the VirtualCam systemd service.
+It supports Intel IPU6 cameras and standard USB webcams, creating a virtual camera
+device using v4l2loopback and GStreamer.
+.SH COMMANDS
+.TP
+.B tray
+Start the system tray icon (default)
+.TP
+.B start
+Start the VirtualCam service
+.TP
+.B stop
+Stop the VirtualCam service
+.TP
+.B toggle
+Toggle the VirtualCam service state
+.TP
+.B status
+Show the current service status
+.TP
+.B logs
+Open the service logs in a viewer
+.TP
+.B config
+Open the configuration file
+.TP
+.B \-h, \-\-help
+Display help message
+.SH FILES
+.TP
+.I ~/.config/webcam-tray/config
+User configuration file
+.TP
+.I ~/.config/systemd/user/virtualcam.service
+systemd user service file
+.TP
+.I $XDG_RUNTIME_DIR/webcam-tray-pipe
+Named pipe for tray communication
+.TP
+.I $XDG_RUNTIME_DIR/webcam-tray.pid
+PID file for instance tracking
+.SH CONFIGURATION
+The configuration file supports the following options:
+.TP
+.B UPDATE_INTERVAL
+Interval in seconds for status updates (default: 2)
+.TP
+.B SERVICE_NAME
+Name of the systemd service to control (default: virtualcam.service)
+.TP
+.B ICON
+Icon name from the system icon theme (default: camera-web)
+.SH DEPENDENCIES
+.TP
+.B Required
+yad, zenity, libnotify, systemd, gstreamer, v4l2-utils
+.TP
+.B Optional
+v4l2loopback-dkms, ipu6-camera-hal (for Intel IPU6), gst-plugin-icamerasrc
+.SH EXAMPLES
+.TP
+Start the tray icon:
+.B webcam-tray
+.TP
+Start the service from command line:
+.B webcam-tray start
+.TP
+View logs:
+.B webcam-tray logs
+.TP
+Open configuration:
+.B webcam-tray config
+.SH SETUP
+First-time setup requires running:
+.TP
+.B webcam-tray-setup
+or
+.B ./setup-service.sh
+.PP
+This will detect your camera hardware and generate the appropriate systemd service file.
+.SH LOGGING
+All operations are logged using systemd's journal. View logs with:
+.TP
+.B journalctl --user -u virtualcam.service
+.TP
+.B journalctl -t webcam-tray
+.SH AUTOSTART
+To enable autostart on login, create a desktop entry in:
+.TP
+.I ~/.config/autostart/webcam-tray.desktop
+.PP
+Or use the GUI configuration tool:
+.B webcam-tray-config
+.SH BUGS
+Report bugs at: https://github.com/PejarRu/webcam-tray/issues
+.SH AUTHOR
+Created for Samsung Galaxy Book4 Pro with Intel IPU6 camera support.
+.SH SEE ALSO
+.BR systemctl (1),
+.BR gst-launch-1.0 (1),
+.BR v4l2-ctl (1),
+.BR journalctl (1)
+.SH LICENSE
+MIT License. See /usr/share/licenses/webcam-tray/LICENSE for details.

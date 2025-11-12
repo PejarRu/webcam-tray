@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck webcam-tray setup-service.sh install.sh configure-gui.sh || true
+  
+  test:
+    name: Test Installation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yad zenity libnotify-bin gstreamer1.0-tools v4l2-utils
+      
+      - name: Check script syntax
+        run: |
+          bash -n webcam-tray
+          bash -n setup-service.sh
+          bash -n install.sh
+          bash -n configure-gui.sh
+      
+      - name: Verify executables
+        run: |
+          chmod +x webcam-tray setup-service.sh install.sh configure-gui.sh
+          ./webcam-tray --help

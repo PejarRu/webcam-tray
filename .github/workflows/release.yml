@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Create tarball
+        run: |
+          mkdir -p webcam-tray-${{ steps.get_version.outputs.VERSION }}
+          cp webcam-tray setup-service.sh install.sh configure-gui.sh README.md LICENSE virtualcam.service.example PKGBUILD webcam-tray-${{ steps.get_version.outputs.VERSION }}/
+          tar -czf webcam-tray-${{ steps.get_version.outputs.VERSION }}.tar.gz webcam-tray-${{ steps.get_version.outputs.VERSION }}/
+      
+      - name: Generate checksums
+        run: |
+          sha256sum webcam-tray-${{ steps.get_version.outputs.VERSION }}.tar.gz > checksums.txt
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            webcam-tray-${{ steps.get_version.outputs.VERSION }}.tar.gz
+            checksums.txt
+          body: |
+            ## VirtualCam Tray v${{ steps.get_version.outputs.VERSION }}
+            
+            ### Instalación
+            
+            **Arch Linux (AUR)**
+            ```bash
+            yay -S webcam-tray
+            ```
+            
+            **Manual**
+            ```bash
+            tar -xzf webcam-tray-${{ steps.get_version.outputs.VERSION }}.tar.gz
+            cd webcam-tray-${{ steps.get_version.outputs.VERSION }}
+            ./install.sh
+            ```
+            
+            ### Verificación
+            
+            Verifica el checksum SHA256:
+            ```bash
+            sha256sum -c checksums.txt
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
