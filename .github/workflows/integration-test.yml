@@ -24,9 +24,8 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git yad zenity libnotify \
             gstreamer gst-plugins-base gst-plugins-good \
-            v4l-utils linux-headers sudo bc
-          # v4l2loopback-dkms puede fallar en containers
-          pacman -S --noconfirm v4l2loopback-dkms || echo "v4l2loopback-dkms installation failed (expected in container)"
+            v4l-utils sudo bc shellcheck
+          # Nota: v4l2loopback-dkms se omite en containers por limitaciones del kernel
       
       - name: Load v4l2loopback module
         run: |
@@ -57,6 +56,10 @@ jobs:
           bash -n install.sh
           bash -n configure-gui.sh
           echo "All scripts have valid syntax"
+      
+      - name: Shellcheck validation
+        run: |
+          shellcheck webcam-tray setup-service.sh install.sh configure-gui.sh || echo "Shellcheck completed with warnings"
 
   test-ubuntu:
     name: Integration Test - Ubuntu 22.04
@@ -71,9 +74,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y yad zenity libnotify-bin \
             gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            v4l-utils bc
-          # v4l2loopback-dkms puede fallar en CI sin kernel headers correctos
-          sudo apt-get install -y v4l2loopback-dkms || echo "v4l2loopback-dkms installation failed (expected in CI)"
+            v4l-utils bc shellcheck
+          # Nota: v4l2loopback-dkms se omite en CI porque requiere kernel headers específicos
       
       - name: Load v4l2loopback
         run: |
@@ -101,7 +103,6 @@ jobs:
       
       - name: Test syntax with shellcheck
         run: |
-          sudo apt-get install -y shellcheck
           shellcheck webcam-tray setup-service.sh install.sh configure-gui.sh || echo "Shellcheck completed with warnings"
 
   test-fedora:
