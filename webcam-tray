@@ -17,21 +17,62 @@ CONFIG_FILE="$CONFIG_DIR/config"
 
 # Logging
 LOG_TAG="webcam-tray"
+LOG_FORMAT="${LOG_FORMAT:-text}"  # text or json
 
 # Source configuration if exists
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
 
+# Log helper - structured logging
+log_json() {
+    local level="$1"
+    local message="$2"
+    local extra="${3:-}"
+    
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local hostname=$(hostname)
+    
+    if [ -n "$extra" ]; then
+        printf '{"timestamp":"%s","level":"%s","hostname":"%s","service":"webcam-tray","msg":"%s",%s}\n' \
+            "$timestamp" "$level" "$hostname" "$message" "$extra"
+    else
+        printf '{"timestamp":"%s","level":"%s","hostname":"%s","service":"webcam-tray","msg":"%s"}\n' \
+            "$timestamp" "$level" "$hostname" "$message"
+    fi
+}
+
 # Log helper
 log_info() {
-    logger -t "$LOG_TAG" -p user.info "$1"
-    echo "[INFO] $1"
+    if [ "$LOG_FORMAT" = "json" ]; then
+        log_json "info" "$1" | logger -t "$LOG_TAG" -p user.info
+        echo "$(log_json "info" "$1")"
+    else
+        logger -t "$LOG_TAG" -p user.info "$1"
+        echo "[INFO] $1"
+    fi
 }
 
 log_error() {
-    logger -t "$LOG_TAG" -p user.err "$1"
-    echo "[ERROR] $1" >&2
+    if [ "$LOG_FORMAT" = "json" ]; then
+        log_json "error" "$1" | logger -t "$LOG_TAG" -p user.err
+        echo "$(log_json "error" "$1")" >&2
+    else
+        logger -t "$LOG_TAG" -p user.err "$1"
+        echo "[ERROR] $1" >&2
+    fi
+}
+
+log_event() {
+    local event_type="$1"
+    local message="$2"
+    local extra="$3"
+    
+    if [ "$LOG_FORMAT" = "json" ]; then
+        log_json "event" "$message" "\"event_type\":\"$event_type\",$extra" | logger -t "$LOG_TAG" -p user.info
+    else
+        logger -t "$LOG_TAG" -p user.info "[$event_type] $message"
+    fi
 }
 
 # Kill previous instances with PID validation
@@ -57,13 +98,13 @@ get_status() {
 }
 
 start_service() {
-    log_info "Starting $SERVICE_NAME"
+    log_event "service_control" "Starting VirtualCam service" "\"action\":\"start\""
     systemctl --user start "$SERVICE_NAME"
     notify-send "VirtualCam" "Servicio iniciado ✓" -i "$ICON"
 }
 
 stop_service() {
-    log_info "Stopping $SERVICE_NAME"
+    log_event "service_control" "Stopping VirtualCam service" "\"action\":\"stop\""
     systemctl --user stop "$SERVICE_NAME"
     notify-send "VirtualCam" "Servicio detenido ✗" -i "$ICON"
 }
@@ -71,8 +112,10 @@ stop_service() {
 toggle_service() {
     status=$(get_status)
     if [ "$status" = "active" ]; then
+        log_event "service_control" "Toggling service to stop" "\"action\":\"toggle\",\"from\":\"active\""
         stop_service
     else
+        log_event "service_control" "Toggling service to start" "\"action\":\"toggle\",\"from\":\"inactive\""
         start_service
     fi
 }
@@ -104,6 +147,12 @@ SERVICE_NAME="virtualcam.service"
 
 # Icon name (from icon theme)
 ICON="camera-web"
+
+# Log format: text or json
+LOG_FORMAT=text
+
+# Autostart on login
+AUTOSTART=false
 EOF
     fi
     
@@ -111,6 +160,55 @@ EOF
         xdg-open "$CONFIG_FILE" &
     else
         zenity --info --text="Config file: $CONFIG_FILE" --width=400
+    fi
+}
+
+enable_autostart() {
+    AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+    AUTOSTART_FILE="$AUTOSTART_DIR/webcam-tray.desktop"
+    
+    mkdir -p "$AUTOSTART_DIR"
+    
+    # Get the full path to webcam-tray
+    WEBCAM_TRAY_PATH=$(command -v webcam-tray || echo "$HOME/.local/bin/webcam-tray")
+    
+    cat > "$AUTOSTART_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=VirtualCam Tray
+Comment=Control del servicio de cámara virtual
+Exec=$WEBCAM_TRAY_PATH
+Icon=camera-web
+Terminal=false
+Categories=Utility;System;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+Hidden=false
+EOF
+    
+    log_event "autostart" "Autostart enabled" "\"path\":\"$AUTOSTART_FILE\""
+    notify-send "VirtualCam Tray" "Autostart habilitado ✓" -i "$ICON"
+}
+
+disable_autostart() {
+    AUTOSTART_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/webcam-tray.desktop"
+    
+    if [ -f "$AUTOSTART_FILE" ]; then
+        rm -f "$AUTOSTART_FILE"
+        log_event "autostart" "Autostart disabled" "\"path\":\"$AUTOSTART_FILE\""
+        notify-send "VirtualCam Tray" "Autostart deshabilitado ✗" -i "$ICON"
+    else
+        notify-send "VirtualCam Tray" "Autostart ya estaba deshabilitado" -i "$ICON"
+    fi
+}
+
+check_autostart() {
+    AUTOSTART_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/webcam-tray.desktop"
+    
+    if [ -f "$AUTOSTART_FILE" ]; then
+        notify-send "VirtualCam Tray" "Autostart: Habilitado ✓" -i "$ICON"
+    else
+        notify-send "VirtualCam Tray" "Autostart: Deshabilitado ✗" -i "$ICON"
     fi
 }
 
@@ -148,9 +246,33 @@ tray_menu() {
         --listen \
         --image="$ICON" \
         --text="VirtualCam" \
-        --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Toggle!$0 cmd_toggle|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Configuración!$0 cmd_config|Salir!$0 cmd_quit" \
+        --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Toggle!$0 cmd_toggle|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Configuración!$0 cmd_config|Autostart!bash -c 'AUTOSTART_SUBMENU'|Salir!$0 cmd_quit" \
         --no-middle \
         --command="" < "$PIPE" &
+    
+    # Replace autostart submenu placeholder after yad starts
+    sleep 0.5
+    if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/webcam-tray.desktop" ]; then
+        # Autostart enabled, show disable option
+        pkill -f "yad.*VirtualCam" 2>/dev/null || true
+        yad --notification \
+            --listen \
+            --image="$ICON" \
+            --text="VirtualCam" \
+            --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Toggle!$0 cmd_toggle|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Configuración!$0 cmd_config|Autostart:Habilitar!$0 cmd_autostart_enable:Deshabilitar!$0 cmd_autostart_disable:Estado!$0 cmd_autostart_status|Salir!$0 cmd_quit" \
+            --no-middle \
+            --command="" < "$PIPE" &
+    else
+        # Autostart disabled, show enable option
+        pkill -f "yad.*VirtualCam" 2>/dev/null || true
+        yad --notification \
+            --listen \
+            --image="$ICON" \
+            --text="VirtualCam" \
+            --menu="Iniciar!$0 cmd_start|Detener!$0 cmd_stop|Toggle!$0 cmd_toggle|Estado!$0 cmd_status|Ver Logs!$0 cmd_logs|Configuración!$0 cmd_config|Autostart:Habilitar!$0 cmd_autostart_enable:Deshabilitar!$0 cmd_autostart_disable:Estado!$0 cmd_autostart_status|Salir!$0 cmd_quit" \
+            --no-middle \
+            --command="" < "$PIPE" &
+    fi
     
     YAD_PID=$!
     log_info "Yad started with PID: $YAD_PID"
@@ -191,6 +313,15 @@ case "${1:-tray}" in
     config)
         show_config
         ;;
+    autostart-enable)
+        enable_autostart
+        ;;
+    autostart-disable)
+        disable_autostart
+        ;;
+    autostart-status)
+        check_autostart
+        ;;
     tray)
         kill_previous
         tray_menu
@@ -213,6 +344,15 @@ case "${1:-tray}" in
     cmd_config)
         show_config
         ;;
+    cmd_autostart_enable)
+        enable_autostart
+        ;;
+    cmd_autostart_disable)
+        disable_autostart
+        ;;
+    cmd_autostart_status)
+        check_autostart
+        ;;
     cmd_quit)
         if [ -f "$PID_FILE" ]; then
             TRAY_PID=$(cat "$PID_FILE")
@@ -233,14 +373,19 @@ case "${1:-tray}" in
         echo "  tray     - Iniciar icono de bandeja (default)"
         echo "  start    - Iniciar servicio"
         echo "  stop     - Detener servicio"
-        echo "  toggle   - Alternar estado del servicio"
-        echo "  status   - Mostrar estado"
-        echo "  logs     - Ver logs"
-        echo "  config   - Abrir configuración"
+        echo "  toggle           - Alternar estado del servicio"
+        echo "  status           - Mostrar estado"
+        echo "  logs             - Ver logs"
+        echo "  config           - Abrir configuración"
+        echo "  autostart-enable - Habilitar autostart en login"
+        echo "  autostart-disable- Deshabilitar autostart"
+        echo "  autostart-status - Ver estado de autostart"
         echo ""
         echo "Archivos:"
-        echo "  Config:  $CONFIG_FILE"
-        echo "  Logs:    journalctl --user -u $SERVICE_NAME"
+        echo "  Config:   $CONFIG_FILE"
+        echo "  Autostart:${XDG_CONFIG_HOME:-$HOME/.config}/autostart/webcam-tray.desktop"
+        echo "  Logs:     journalctl --user -u $SERVICE_NAME"
+        echo "  Logs Tray:journalctl -t $LOG_TAG"
         ;;
     *)
         echo "Comando desconocido: $1"

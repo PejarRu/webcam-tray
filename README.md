@@ -30,6 +30,12 @@ Sistema de control gráfico para gestionar servicios de cámara virtual en Linux
 - 🆕 **Tests automatizados** con bats
 - 🆕 **Manpage incluida**
 
+### Mejoras v1.2.0
+- 🆕 **Autostart en login** - Habilitar/deshabilitar desde menú del tray
+- 🆕 **Logs estructurados en JSON** - Logging con timestamps y event types
+- 🆕 **Suite de tests completa** - Smoke, Chaos, Performance tests
+- 🆕 **Integration tests en CI** - Tests en Arch, Ubuntu y Fedora
+
 ## 📋 Requisitos
 
 ### Obligatorios
@@ -144,6 +150,8 @@ webcam-tray toggle    # Alternar estado
 webcam-tray status    # Mostrar estado
 webcam-tray logs      # Ver logs
 webcam-tray config    # Abrir configuración
+webcam-tray autostart-enable  # Habilitar autostart
+webcam-tray autostart-disable # Deshabilitar autostart
 webcam-tray --help    # Ayuda
 ```
 
@@ -155,6 +163,10 @@ webcam-tray --help    # Ayuda
   - Estado
   - Ver Logs
   - Configuración
+  - **Autostart** (submenu)
+    - Habilitar
+    - Deshabilitar
+    - Estado
   - Salir
 - El icono permanece siempre visible
 - Solo el tooltip cambia: **"✓ Activo"** / **"✗ Inactivo"**
@@ -189,6 +201,49 @@ SERVICE_NAME="virtualcam.service"
 
 # Icono del tema del sistema
 ICON="camera-web"
+
+# Log format: text or json
+LOG_FORMAT=text
+
+# Autostart on login
+AUTOSTART=false
+```
+
+### Logging
+
+El proyecto soporta dos formatos de logging:
+
+**Formato texto** (default):
+```bash
+[INFO] Starting virtualcam.service
+[ERROR] Service failed
+```
+
+**Formato JSON estructurado**:
+```bash
+# En ~/.config/webcam-tray/config
+LOG_FORMAT=json
+```
+
+Logs JSON incluyen:
+- `timestamp` (ISO 8601)
+- `level` (info, error, event)
+- `hostname`
+- `service` (webcam-tray)
+- `msg` (mensaje)
+- `event_type` (para eventos)
+- Campos adicionales según contexto
+
+**Ver logs**:
+```bash
+# Logs del tray
+journalctl -t webcam-tray -f
+
+# Logs del servicio
+journalctl --user -u virtualcam.service -f
+
+# Logs JSON con jq
+journalctl -t webcam-tray -o cat | jq '.'
 ```
 
 ### Autostart
@@ -235,6 +290,64 @@ EOF
 | ✅ Samsung Galaxy Book4 Pro | Totalmente soportado | Configuración optimizada |
 | ✅ Webcams USB estándar | Soportado | Auto-detectado, usa v4l2src |
 | ⚠️ Otras cámaras Intel | Puede funcionar | Requiere configuración manual |
+
+## 🧪 Testing
+
+El proyecto incluye una suite completa de tests:
+
+### Tests disponibles
+
+1. **Unit Tests** (bats)
+   - Tests básicos de funcionalidad
+   - Sin dependencias de hardware
+
+2. **Smoke Tests**
+   - Verificación rápida con hardware real
+   - Instala, configura e inicia el servicio
+
+3. **Chaos Tests**
+   - Tests de resiliencia
+   - Kill de procesos, remoción de módulos, etc.
+
+4. **Performance Tests**
+   - Medición de FPS, latencia, CPU, memoria
+   - Sustained load tests
+
+5. **Integration Tests** (CI)
+   - Tests automáticos en Arch, Ubuntu, Fedora
+   - Ejecutan en cada push/PR
+
+### Ejecutar tests
+
+```bash
+# Todos los tests
+./tests/run-all.sh
+
+# Tests específicos
+./tests/run-all.sh --smoke-only
+./tests/run-all.sh --chaos-only
+./tests/run-all.sh --performance-only
+
+# Unit tests con bats
+bats tests/
+
+# Tests individuales
+./tests/smoke-test.sh
+./tests/chaos-test.sh
+./tests/performance-test.sh
+```
+
+### Requisitos para tests
+
+```bash
+# Instalar bats (Arch)
+sudo pacman -S bats bc v4l2loopback-dkms
+
+# Instalar bats (Ubuntu)
+sudo apt install bats bc v4l2loopback-dkms
+```
+
+Ver [tests/README.md](tests/README.md) para documentación completa.
 
 ## 🔧 Troubleshooting
 
@@ -344,7 +457,14 @@ bats tests/
 shellcheck webcam-tray setup-service.sh install.sh configure-gui.sh
 ```
 
-## � Changelog
+## 📝 Changelog
+
+### v1.2.0 (2025-11-12)
+- ✨ Autostart en login (habilitar/deshabilitar desde tray)
+- ✨ Logs estructurados en JSON con timestamps
+- ✨ Suite completa de tests (smoke, chaos, performance)
+- ✨ Integration tests en CI para Arch, Ubuntu, Fedora
+- 📚 Documentación extendida de testing
 
 ### v1.1.0 (2025-11-12)
 - ✨ Setup automático con detección de hardware

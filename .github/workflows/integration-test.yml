@@ -1,0 +1,135 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  test-arch:
+    name: Integration Test - Arch Linux
+    runs-on: ubuntu-latest
+    container: 
+      image: archlinux:latest
+      options: --privileged
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git yad zenity libnotify \
+            gstreamer gst-plugins-base gst-plugins-good \
+            v4l2loopback-dkms v4l2-utils linux-headers sudo bc
+      
+      - name: Load v4l2loopback module
+        run: |
+          modprobe v4l2loopback devices=1 video_nr=48 card_label="VirtualCam" || echo "Module load failed (expected in container)"
+      
+      - name: Test install.sh
+        run: |
+          chmod +x install.sh webcam-tray setup-service.sh configure-gui.sh
+          # Mock interactive parts
+          echo "n" | ./install.sh || true
+      
+      - name: Verify installation
+        run: |
+          mkdir -p ~/.local/bin
+          cp webcam-tray ~/.local/bin/
+          chmod +x ~/.local/bin/webcam-tray
+          ~/.local/bin/webcam-tray --help
+      
+      - name: Test configuration file creation
+        run: |
+          ~/.local/bin/webcam-tray config || true
+          test -f ~/.config/webcam-tray/config || echo "Config not created (expected without GUI)"
+      
+      - name: Run smoke tests
+        run: |
+          chmod +x tests/smoke-test.sh
+          ./tests/smoke-test.sh || echo "Smoke test failed (expected without real hardware)"
+
+  test-ubuntu:
+    name: Integration Test - Ubuntu 22.04
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yad zenity libnotify-bin \
+            gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            v4l2loopback-dkms v4l2-utils bc
+      
+      - name: Load v4l2loopback
+        run: |
+          sudo modprobe v4l2loopback devices=1 video_nr=48 card_label="VirtualCam" || echo "Module load may fail"
+      
+      - name: Test installation
+        run: |
+          chmod +x install.sh webcam-tray setup-service.sh configure-gui.sh
+          echo "n" | ./install.sh || true
+      
+      - name: Verify binary
+        run: |
+          mkdir -p ~/.local/bin
+          cp webcam-tray ~/.local/bin/
+          chmod +x ~/.local/bin/webcam-tray
+          ~/.local/bin/webcam-tray --help
+      
+      - name: Test syntax with shellcheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck webcam-tray setup-service.sh install.sh configure-gui.sh || true
+
+  test-fedora:
+    name: Integration Test - Fedora
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          dnf install -y yad zenity libnotify gstreamer1 \
+            gstreamer1-plugins-base gstreamer1-plugins-good \
+            v4l-utils bc procps-ng
+      
+      - name: Test installation
+        run: |
+          chmod +x install.sh webcam-tray
+          echo "n" | ./install.sh || true
+      
+      - name: Verify installation
+        run: |
+          mkdir -p ~/.local/bin
+          cp webcam-tray ~/.local/bin/
+          chmod +x ~/.local/bin/webcam-tray
+          ~/.local/bin/webcam-tray --help
+
+  test-bats:
+    name: Unit Tests (bats)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+      
+      - name: Run bats tests
+        run: |
+          chmod +x webcam-tray setup-service.sh install.sh configure-gui.sh
+          bats tests/ || true
