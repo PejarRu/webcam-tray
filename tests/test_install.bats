@@ -32,3 +32,9 @@ teardown() {
 @test "webcam-tray is valid bash" {
     bash -n ./webcam-tray
 }
+
+@test "uninstall.sh exists and is valid bash" {
+    [ -f ./uninstall.sh ]
+    bash -n ./uninstall.sh
+}
+

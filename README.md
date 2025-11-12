@@ -138,7 +138,66 @@ Este script:
 webcam-tray
 ```
 
-## 📖 Uso
+## �️ Desinstalación
+
+### Desinstalación Rápida (Recomendado)
+
+```bash
+# Ejecutar desinstalador
+chmod +x uninstall.sh
+./uninstall.sh
+```
+
+El desinstalador:
+1. Detiene y deshabilita el servicio virtualcam
+2. Elimina el binario de `~/.local/bin/webcam-tray`
+3. Elimina configuración de `~/.config/webcam-tray/`
+4. Elimina autostart de `~/.config/autostart/`
+5. Elimina el servicio systemd
+6. Opcionalmente descarga el módulo v4l2loopback
+7. Opcionalmente muestra comandos para desinstalar dependencias
+
+**Nota:** Las dependencias (yad, zenity, gstreamer, etc.) NO se eliminan automáticamente porque pueden ser usadas por otros programas.
+
+### Desinstalación desde AUR
+
+```bash
+yay -R webcam-tray
+# o
+paru -R webcam-tray
+```
+
+### Desinstalación Manual
+
+```bash
+# 1. Detener y deshabilitar servicio
+systemctl --user stop virtualcam.service
+systemctl --user disable virtualcam.service
+
+# 2. Eliminar archivos
+rm ~/.local/bin/webcam-tray
+rm -rf ~/.config/webcam-tray/
+rm ~/.config/autostart/webcam-tray.desktop
+rm ~/.config/systemd/user/virtualcam.service
+
+# 3. Recargar systemd
+systemctl --user daemon-reload
+
+# 4. (Opcional) Descargar módulo kernel
+sudo modprobe -r v4l2loopback
+
+# 5. (Opcional) Desinstalar dependencias
+# ARCH
+sudo pacman -R yad zenity libnotify v4l2-utils v4l2loopback-dkms
+
+# UBUNTU/DEBIAN
+sudo apt remove yad zenity libnotify-bin v4l2-utils v4l2loopback-dkms
+
+# FEDORA
+sudo dnf remove yad zenity libnotify v4l2-utils v4l2loopback
+```
+
+## �📖 Uso
 
 ### Comandos CLI
 

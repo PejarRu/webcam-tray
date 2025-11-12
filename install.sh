@@ -210,6 +210,9 @@ main() {
     echo ""
     echo "Para iniciar el tray:"
     echo "  webcam-tray"
+    echo ""
+    echo "Para desinstalar en el futuro:"
+    echo "  ./uninstall.sh"
 }
 
 main

@@ -25,6 +25,7 @@ package() {
     install -Dm755 setup-service.sh "$pkgdir/usr/bin/webcam-tray-setup"
     install -Dm755 configure-gui.sh "$pkgdir/usr/bin/webcam-tray-config"
     install -Dm755 install.sh "$pkgdir/usr/share/$pkgname/install.sh"
+    install -Dm755 uninstall.sh "$pkgdir/usr/share/$pkgname/uninstall.sh"
     
     # Install service template
     install -Dm644 virtualcam.service.example "$pkgdir/usr/share/$pkgname/virtualcam.service.example"

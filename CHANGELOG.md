@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 🆕 **Uninstall script** (`uninstall.sh`)
+  - Interactive uninstallation with confirmations
+  - Stops and disables virtualcam service
+  - Removes all installed files and configuration
+  - Optional removal of v4l2loopback kernel module
+  - Optional display of commands to remove dependencies
+  - Color-coded output for better UX
+  - Added to PKGBUILD for AUR package
+
 ## [1.1.0] - 2025-11-12
 
 ### Added
