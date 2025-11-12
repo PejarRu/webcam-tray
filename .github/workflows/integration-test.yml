@@ -24,7 +24,7 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git yad zenity libnotify \
             gstreamer gst-plugins-base gst-plugins-good \
-            v4l2loopback-dkms v4l2-utils linux-headers sudo bc
+            v4l2loopback-dkms v4l-utils linux-headers sudo bc
       
       - name: Load v4l2loopback module
         run: |
@@ -69,7 +69,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y yad zenity libnotify-bin \
             gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            v4l2loopback-dkms v4l2-utils bc
+            v4l2loopback-dkms v4l-utils bc
       
       - name: Load v4l2loopback
         run: |
